@@ -85,51 +85,51 @@ int main(int argc, char **argv)
     std::cout << "write time: " << set_time.count() << " seconds" << std::endl;
     std::cout << "write throughput: " << (static_cast<double> (total_write_size) / set_time.count() / 1024) << "MB/s" << std::endl;
 
-    std::cout << "\n[Merge bandwidth] if you want to limit the bandwidth during merge, please execute the following commands:\n"
-            << "  before merge please execute: sh limit_bandwidth.sh\n"
-            << "  after merge please execute: sh unlimit_all.sh\n\n";
-     int merge_round=1;
+    // std::cout << "\n[Merge bandwidth] if you want to limit the bandwidth during merge, please execute the following commands:\n"
+    //         << "  before merge please execute: sh limit_bandwidth.sh\n"
+    //         << "  after merge please execute: sh unlimit_all.sh\n\n";
+    //  int merge_round=1;
 
-    while (true)
-    {
-        if(merge_round>2)
-        {
-            std::cout<<"merge completed"<<std::endl;
-            break;
-        }
-        std::cout << "start[ "<<merge_round<<" time]merge now? (Y/N)" << std::endl;
-        char choose;
-        std::cin >> choose;
-        if (choose == 'Y' || choose == 'y')
-        {      
-            client.start_merge(merge_round);
-            ++merge_round;
-        }
-        else if (choose == 'N' || choose == 'n')
-        {
-            break;
-        }
-        else
-        {
-            std::cout << "Invalid input, please enter Y or N." << std::endl;
-        }
-    }
+    // while (true)
+    // {
+    //     if(merge_round>2)
+    //     {
+    //         std::cout<<"merge completed"<<std::endl;
+    //         break;
+    //     }
+    //     std::cout << "start[ "<<merge_round<<" time]merge now? (Y/N)" << std::endl;
+    //     char choose;
+    //     std::cin >> choose;
+    //     if (choose == 'Y' || choose == 'y')
+    //     {      
+    //         client.start_merge(merge_round);
+    //         ++merge_round;
+    //     }
+    //     else if (choose == 'N' || choose == 'n')
+    //     {
+    //         break;
+    //     }
+    //     else
+    //     {
+    //         std::cout << "Invalid input, please enter Y or N." << std::endl;
+    //     }
+    // }
     //read test
-    // int stripe_id_to_read = 0;
-    // int start_block_id = stripe_id_to_read * n;
-    // int end_block_id = start_block_id + k - 1;
-    // std::cout << "reading one stripe once"<< std::endl;
-    // std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-    // client.get_blocks(start_block_id, end_block_id);
-    // std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-    // double elapsed_s = time_span.count();
-    // int block_size_bytes = parameters[3];
-    // int requested_blocks = end_block_id - start_block_id + 1;
-    // double physical_tp_mib =
-    //     static_cast<double>(requested_blocks) * block_size_bytes /
-    //     elapsed_s / (1024.0 * 1024.0);
-    // std::cout<<"read time: "<<elapsed_s<<" seconds"<<std::endl;
-    // std::cout << "read rate: " << physical_tp_mib << "MB/s" << std::endl;
+    int stripe_id_to_read = 0;
+    int start_block_id = stripe_id_to_read * n;
+    int end_block_id = start_block_id + k - 1;
+    std::cout << "reading one stripe once"<< std::endl;
+    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+    client.get_blocks(start_block_id, end_block_id);
+    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    double elapsed_s = time_span.count();
+    int block_size_bytes = parameters[3];
+    int requested_blocks = end_block_id - start_block_id + 1;
+    double physical_tp_mib =
+        static_cast<double>(requested_blocks) * block_size_bytes /
+        elapsed_s / (1024.0 * 1024.0);
+    std::cout<<"read time: "<<elapsed_s<<" seconds"<<std::endl;
+    std::cout << "read rate: " << physical_tp_mib << "MB/s" << std::endl;
     return 0;
 }
