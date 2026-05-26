@@ -48,6 +48,9 @@ namespace coordinator_proto {
 class AskIfSuccess;
 struct AskIfSuccessDefaultTypeInternal;
 extern AskIfSuccessDefaultTypeInternal _AskIfSuccess_default_instance_;
+class AskIfSuccessBatch;
+struct AskIfSuccessBatchDefaultTypeInternal;
+extern AskIfSuccessBatchDefaultTypeInternal _AskIfSuccessBatch_default_instance_;
 class BlockIDsAndClientIP;
 struct BlockIDsAndClientIPDefaultTypeInternal;
 extern BlockIDsAndClientIPDefaultTypeInternal _BlockIDsAndClientIP_default_instance_;
@@ -93,6 +96,9 @@ extern RepIfSetParaSuccessDefaultTypeInternal _RepIfSetParaSuccess_default_insta
 class RepIfSuccess;
 struct RepIfSuccessDefaultTypeInternal;
 extern RepIfSuccessDefaultTypeInternal _RepIfSuccess_default_instance_;
+class RepIfSuccessBatch;
+struct RepIfSuccessBatchDefaultTypeInternal;
+extern RepIfSuccessBatchDefaultTypeInternal _RepIfSuccessBatch_default_instance_;
 class RepStripeIds;
 struct RepStripeIdsDefaultTypeInternal;
 extern RepStripeIdsDefaultTypeInternal _RepStripeIds_default_instance_;
@@ -126,6 +132,7 @@ extern StripePosListAndClientDefaultTypeInternal _StripePosListAndClient_default
 }  // namespace coordinator_proto
 PROTOBUF_NAMESPACE_OPEN
 template<> ::coordinator_proto::AskIfSuccess* Arena::CreateMaybeMessage<::coordinator_proto::AskIfSuccess>(Arena*);
+template<> ::coordinator_proto::AskIfSuccessBatch* Arena::CreateMaybeMessage<::coordinator_proto::AskIfSuccessBatch>(Arena*);
 template<> ::coordinator_proto::BlockIDsAndClientIP* Arena::CreateMaybeMessage<::coordinator_proto::BlockIDsAndClientIP>(Arena*);
 template<> ::coordinator_proto::CommitAbortKey* Arena::CreateMaybeMessage<::coordinator_proto::CommitAbortKey>(Arena*);
 template<> ::coordinator_proto::DegradedReadReply* Arena::CreateMaybeMessage<::coordinator_proto::DegradedReadReply>(Arena*);
@@ -141,6 +148,7 @@ template<> ::coordinator_proto::RepIfDeling* Arena::CreateMaybeMessage<::coordin
 template<> ::coordinator_proto::RepIfGetSuccess* Arena::CreateMaybeMessage<::coordinator_proto::RepIfGetSuccess>(Arena*);
 template<> ::coordinator_proto::RepIfSetParaSuccess* Arena::CreateMaybeMessage<::coordinator_proto::RepIfSetParaSuccess>(Arena*);
 template<> ::coordinator_proto::RepIfSuccess* Arena::CreateMaybeMessage<::coordinator_proto::RepIfSuccess>(Arena*);
+template<> ::coordinator_proto::RepIfSuccessBatch* Arena::CreateMaybeMessage<::coordinator_proto::RepIfSuccessBatch>(Arena*);
 template<> ::coordinator_proto::RepStripeIds* Arena::CreateMaybeMessage<::coordinator_proto::RepStripeIds>(Arena*);
 template<> ::coordinator_proto::ReplyFromCoordinator* Arena::CreateMaybeMessage<::coordinator_proto::ReplyFromCoordinator>(Arena*);
 template<> ::coordinator_proto::ReplyProxyIPPort* Arena::CreateMaybeMessage<::coordinator_proto::ReplyProxyIPPort>(Arena*);
@@ -1974,6 +1982,363 @@ class RepIfSuccess final :
 };
 // -------------------------------------------------------------------
 
+class AskIfSuccessBatch final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:coordinator_proto.AskIfSuccessBatch) */ {
+ public:
+  inline AskIfSuccessBatch() : AskIfSuccessBatch(nullptr) {}
+  ~AskIfSuccessBatch() override;
+  explicit PROTOBUF_CONSTEXPR AskIfSuccessBatch(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  AskIfSuccessBatch(const AskIfSuccessBatch& from);
+  AskIfSuccessBatch(AskIfSuccessBatch&& from) noexcept
+    : AskIfSuccessBatch() {
+    *this = ::std::move(from);
+  }
+
+  inline AskIfSuccessBatch& operator=(const AskIfSuccessBatch& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline AskIfSuccessBatch& operator=(AskIfSuccessBatch&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const AskIfSuccessBatch& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const AskIfSuccessBatch* internal_default_instance() {
+    return reinterpret_cast<const AskIfSuccessBatch*>(
+               &_AskIfSuccessBatch_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    10;
+
+  friend void swap(AskIfSuccessBatch& a, AskIfSuccessBatch& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(AskIfSuccessBatch* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(AskIfSuccessBatch* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  AskIfSuccessBatch* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<AskIfSuccessBatch>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const AskIfSuccessBatch& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const AskIfSuccessBatch& from) {
+    AskIfSuccessBatch::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(AskIfSuccessBatch* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "coordinator_proto.AskIfSuccessBatch";
+  }
+  protected:
+  explicit AskIfSuccessBatch(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kKeysFieldNumber = 1,
+    kOppFieldNumber = 2,
+    kStripeIdFieldNumber = 3,
+  };
+  // repeated string keys = 1;
+  int keys_size() const;
+  private:
+  int _internal_keys_size() const;
+  public:
+  void clear_keys();
+  const std::string& keys(int index) const;
+  std::string* mutable_keys(int index);
+  void set_keys(int index, const std::string& value);
+  void set_keys(int index, std::string&& value);
+  void set_keys(int index, const char* value);
+  void set_keys(int index, const char* value, size_t size);
+  std::string* add_keys();
+  void add_keys(const std::string& value);
+  void add_keys(std::string&& value);
+  void add_keys(const char* value);
+  void add_keys(const char* value, size_t size);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>& keys() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>* mutable_keys();
+  private:
+  const std::string& _internal_keys(int index) const;
+  std::string* _internal_add_keys();
+  public:
+
+  // int32 opp = 2;
+  void clear_opp();
+  int32_t opp() const;
+  void set_opp(int32_t value);
+  private:
+  int32_t _internal_opp() const;
+  void _internal_set_opp(int32_t value);
+  public:
+
+  // int32 stripe_id = 3;
+  void clear_stripe_id();
+  int32_t stripe_id() const;
+  void set_stripe_id(int32_t value);
+  private:
+  int32_t _internal_stripe_id() const;
+  void _internal_set_stripe_id(int32_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:coordinator_proto.AskIfSuccessBatch)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string> keys_;
+    int32_t opp_;
+    int32_t stripe_id_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_coordinator_2eproto;
+};
+// -------------------------------------------------------------------
+
+class RepIfSuccessBatch final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:coordinator_proto.RepIfSuccessBatch) */ {
+ public:
+  inline RepIfSuccessBatch() : RepIfSuccessBatch(nullptr) {}
+  ~RepIfSuccessBatch() override;
+  explicit PROTOBUF_CONSTEXPR RepIfSuccessBatch(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  RepIfSuccessBatch(const RepIfSuccessBatch& from);
+  RepIfSuccessBatch(RepIfSuccessBatch&& from) noexcept
+    : RepIfSuccessBatch() {
+    *this = ::std::move(from);
+  }
+
+  inline RepIfSuccessBatch& operator=(const RepIfSuccessBatch& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline RepIfSuccessBatch& operator=(RepIfSuccessBatch&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const RepIfSuccessBatch& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const RepIfSuccessBatch* internal_default_instance() {
+    return reinterpret_cast<const RepIfSuccessBatch*>(
+               &_RepIfSuccessBatch_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    11;
+
+  friend void swap(RepIfSuccessBatch& a, RepIfSuccessBatch& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(RepIfSuccessBatch* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(RepIfSuccessBatch* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  RepIfSuccessBatch* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<RepIfSuccessBatch>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const RepIfSuccessBatch& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const RepIfSuccessBatch& from) {
+    RepIfSuccessBatch::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(RepIfSuccessBatch* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "coordinator_proto.RepIfSuccessBatch";
+  }
+  protected:
+  explicit RepIfSuccessBatch(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kIfcommitFieldNumber = 2,
+    kAllCommittedFieldNumber = 1,
+  };
+  // repeated bool ifcommit = 2;
+  int ifcommit_size() const;
+  private:
+  int _internal_ifcommit_size() const;
+  public:
+  void clear_ifcommit();
+  private:
+  bool _internal_ifcommit(int index) const;
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool >&
+      _internal_ifcommit() const;
+  void _internal_add_ifcommit(bool value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool >*
+      _internal_mutable_ifcommit();
+  public:
+  bool ifcommit(int index) const;
+  void set_ifcommit(int index, bool value);
+  void add_ifcommit(bool value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool >&
+      ifcommit() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool >*
+      mutable_ifcommit();
+
+  // bool all_committed = 1;
+  void clear_all_committed();
+  bool all_committed() const;
+  void set_all_committed(bool value);
+  private:
+  bool _internal_all_committed() const;
+  void _internal_set_all_committed(bool value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:coordinator_proto.RepIfSuccessBatch)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool > ifcommit_;
+    bool all_committed_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_coordinator_2eproto;
+};
+// -------------------------------------------------------------------
+
 class KeyAndClientIP final :
     public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:coordinator_proto.KeyAndClientIP) */ {
  public:
@@ -2022,7 +2387,7 @@ class KeyAndClientIP final :
                &_KeyAndClientIP_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    10;
+    12;
 
   friend void swap(KeyAndClientIP& a, KeyAndClientIP& b) {
     a.Swap(&b);
@@ -2202,7 +2567,7 @@ class RepIfGetSuccess final :
                &_RepIfGetSuccess_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    11;
+    13;
 
   friend void swap(RepIfGetSuccess& a, RepIfGetSuccess& b) {
     a.Swap(&b);
@@ -2361,7 +2726,7 @@ class BlockIDsAndClientIP final :
                &_BlockIDsAndClientIP_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    12;
+    14;
 
   friend void swap(BlockIDsAndClientIP& a, BlockIDsAndClientIP& b) {
     a.Swap(&b);
@@ -2558,7 +2923,7 @@ class KeyFromClient final :
                &_KeyFromClient_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    13;
+    15;
 
   friend void swap(KeyFromClient& a, KeyFromClient& b) {
     a.Swap(&b);
@@ -2711,7 +3076,7 @@ class StripeIdFromClient final :
                &_StripeIdFromClient_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    14;
+    16;
 
   friend void swap(StripeIdFromClient& a, StripeIdFromClient& b) {
     a.Swap(&b);
@@ -2859,7 +3224,7 @@ class StripeIdAndBlockIDsFromClient final :
                &_StripeIdAndBlockIDsFromClient_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    17;
 
   friend void swap(StripeIdAndBlockIDsFromClient& a, StripeIdAndBlockIDsFromClient& b) {
     a.Swap(&b);
@@ -3032,7 +3397,7 @@ class NodeIdFromClient final :
                &_NodeIdFromClient_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    18;
 
   friend void swap(NodeIdFromClient& a, NodeIdFromClient& b) {
     a.Swap(&b);
@@ -3180,7 +3545,7 @@ class RepIfDeling final :
                &_RepIfDeling_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    17;
+    19;
 
   friend void swap(RepIfDeling& a, RepIfDeling& b) {
     a.Swap(&b);
@@ -3328,7 +3693,7 @@ class RepStripeIds final :
                &_RepStripeIds_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    18;
+    20;
 
   friend void swap(RepStripeIds& a, RepStripeIds& b) {
     a.Swap(&b);
@@ -3490,7 +3855,7 @@ class RepBlockNum final :
                &_RepBlockNum_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    19;
+    21;
 
   friend void swap(RepBlockNum& a, RepBlockNum& b) {
     a.Swap(&b);
@@ -3638,7 +4003,7 @@ class DegradedReadReply final :
                &_DegradedReadReply_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    20;
+    22;
 
   friend void swap(DegradedReadReply& a, DegradedReadReply& b) {
     a.Swap(&b);
@@ -3819,7 +4184,7 @@ class RecoveryReply final :
                &_RecoveryReply_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    21;
+    23;
 
   friend void swap(RecoveryReply& a, RecoveryReply& b) {
     a.Swap(&b);
@@ -4011,7 +4376,7 @@ class StripePos final :
                &_StripePos_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    22;
+    24;
 
   friend void swap(StripePos& a, StripePos& b) {
     a.Swap(&b);
@@ -4170,7 +4535,7 @@ class StripePosListAndClient final :
                &_StripePosListAndClient_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    23;
+    25;
 
   friend void swap(StripePosListAndClient& a, StripePosListAndClient& b) {
     a.Swap(&b);
@@ -4354,7 +4719,7 @@ class MergeRequest final :
                &_MergeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    24;
+    26;
 
   friend void swap(MergeRequest& a, MergeRequest& b) {
     a.Swap(&b);
@@ -4535,7 +4900,7 @@ class MergeReply final :
                &_MergeReply_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    25;
+    27;
 
   friend void swap(MergeReply& a, MergeReply& b) {
     a.Swap(&b);
@@ -5736,6 +6101,196 @@ inline void RepIfSuccess::set_ifcommit(bool value) {
 
 // -------------------------------------------------------------------
 
+// AskIfSuccessBatch
+
+// repeated string keys = 1;
+inline int AskIfSuccessBatch::_internal_keys_size() const {
+  return _impl_.keys_.size();
+}
+inline int AskIfSuccessBatch::keys_size() const {
+  return _internal_keys_size();
+}
+inline void AskIfSuccessBatch::clear_keys() {
+  _impl_.keys_.Clear();
+}
+inline std::string* AskIfSuccessBatch::add_keys() {
+  std::string* _s = _internal_add_keys();
+  // @@protoc_insertion_point(field_add_mutable:coordinator_proto.AskIfSuccessBatch.keys)
+  return _s;
+}
+inline const std::string& AskIfSuccessBatch::_internal_keys(int index) const {
+  return _impl_.keys_.Get(index);
+}
+inline const std::string& AskIfSuccessBatch::keys(int index) const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.AskIfSuccessBatch.keys)
+  return _internal_keys(index);
+}
+inline std::string* AskIfSuccessBatch::mutable_keys(int index) {
+  // @@protoc_insertion_point(field_mutable:coordinator_proto.AskIfSuccessBatch.keys)
+  return _impl_.keys_.Mutable(index);
+}
+inline void AskIfSuccessBatch::set_keys(int index, const std::string& value) {
+  _impl_.keys_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.AskIfSuccessBatch.keys)
+}
+inline void AskIfSuccessBatch::set_keys(int index, std::string&& value) {
+  _impl_.keys_.Mutable(index)->assign(std::move(value));
+  // @@protoc_insertion_point(field_set:coordinator_proto.AskIfSuccessBatch.keys)
+}
+inline void AskIfSuccessBatch::set_keys(int index, const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  _impl_.keys_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:coordinator_proto.AskIfSuccessBatch.keys)
+}
+inline void AskIfSuccessBatch::set_keys(int index, const char* value, size_t size) {
+  _impl_.keys_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:coordinator_proto.AskIfSuccessBatch.keys)
+}
+inline std::string* AskIfSuccessBatch::_internal_add_keys() {
+  return _impl_.keys_.Add();
+}
+inline void AskIfSuccessBatch::add_keys(const std::string& value) {
+  _impl_.keys_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:coordinator_proto.AskIfSuccessBatch.keys)
+}
+inline void AskIfSuccessBatch::add_keys(std::string&& value) {
+  _impl_.keys_.Add(std::move(value));
+  // @@protoc_insertion_point(field_add:coordinator_proto.AskIfSuccessBatch.keys)
+}
+inline void AskIfSuccessBatch::add_keys(const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  _impl_.keys_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:coordinator_proto.AskIfSuccessBatch.keys)
+}
+inline void AskIfSuccessBatch::add_keys(const char* value, size_t size) {
+  _impl_.keys_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:coordinator_proto.AskIfSuccessBatch.keys)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>&
+AskIfSuccessBatch::keys() const {
+  // @@protoc_insertion_point(field_list:coordinator_proto.AskIfSuccessBatch.keys)
+  return _impl_.keys_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>*
+AskIfSuccessBatch::mutable_keys() {
+  // @@protoc_insertion_point(field_mutable_list:coordinator_proto.AskIfSuccessBatch.keys)
+  return &_impl_.keys_;
+}
+
+// int32 opp = 2;
+inline void AskIfSuccessBatch::clear_opp() {
+  _impl_.opp_ = 0;
+}
+inline int32_t AskIfSuccessBatch::_internal_opp() const {
+  return _impl_.opp_;
+}
+inline int32_t AskIfSuccessBatch::opp() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.AskIfSuccessBatch.opp)
+  return _internal_opp();
+}
+inline void AskIfSuccessBatch::_internal_set_opp(int32_t value) {
+  
+  _impl_.opp_ = value;
+}
+inline void AskIfSuccessBatch::set_opp(int32_t value) {
+  _internal_set_opp(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.AskIfSuccessBatch.opp)
+}
+
+// int32 stripe_id = 3;
+inline void AskIfSuccessBatch::clear_stripe_id() {
+  _impl_.stripe_id_ = 0;
+}
+inline int32_t AskIfSuccessBatch::_internal_stripe_id() const {
+  return _impl_.stripe_id_;
+}
+inline int32_t AskIfSuccessBatch::stripe_id() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.AskIfSuccessBatch.stripe_id)
+  return _internal_stripe_id();
+}
+inline void AskIfSuccessBatch::_internal_set_stripe_id(int32_t value) {
+  
+  _impl_.stripe_id_ = value;
+}
+inline void AskIfSuccessBatch::set_stripe_id(int32_t value) {
+  _internal_set_stripe_id(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.AskIfSuccessBatch.stripe_id)
+}
+
+// -------------------------------------------------------------------
+
+// RepIfSuccessBatch
+
+// bool all_committed = 1;
+inline void RepIfSuccessBatch::clear_all_committed() {
+  _impl_.all_committed_ = false;
+}
+inline bool RepIfSuccessBatch::_internal_all_committed() const {
+  return _impl_.all_committed_;
+}
+inline bool RepIfSuccessBatch::all_committed() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RepIfSuccessBatch.all_committed)
+  return _internal_all_committed();
+}
+inline void RepIfSuccessBatch::_internal_set_all_committed(bool value) {
+  
+  _impl_.all_committed_ = value;
+}
+inline void RepIfSuccessBatch::set_all_committed(bool value) {
+  _internal_set_all_committed(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RepIfSuccessBatch.all_committed)
+}
+
+// repeated bool ifcommit = 2;
+inline int RepIfSuccessBatch::_internal_ifcommit_size() const {
+  return _impl_.ifcommit_.size();
+}
+inline int RepIfSuccessBatch::ifcommit_size() const {
+  return _internal_ifcommit_size();
+}
+inline void RepIfSuccessBatch::clear_ifcommit() {
+  _impl_.ifcommit_.Clear();
+}
+inline bool RepIfSuccessBatch::_internal_ifcommit(int index) const {
+  return _impl_.ifcommit_.Get(index);
+}
+inline bool RepIfSuccessBatch::ifcommit(int index) const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RepIfSuccessBatch.ifcommit)
+  return _internal_ifcommit(index);
+}
+inline void RepIfSuccessBatch::set_ifcommit(int index, bool value) {
+  _impl_.ifcommit_.Set(index, value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RepIfSuccessBatch.ifcommit)
+}
+inline void RepIfSuccessBatch::_internal_add_ifcommit(bool value) {
+  _impl_.ifcommit_.Add(value);
+}
+inline void RepIfSuccessBatch::add_ifcommit(bool value) {
+  _internal_add_ifcommit(value);
+  // @@protoc_insertion_point(field_add:coordinator_proto.RepIfSuccessBatch.ifcommit)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool >&
+RepIfSuccessBatch::_internal_ifcommit() const {
+  return _impl_.ifcommit_;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool >&
+RepIfSuccessBatch::ifcommit() const {
+  // @@protoc_insertion_point(field_list:coordinator_proto.RepIfSuccessBatch.ifcommit)
+  return _internal_ifcommit();
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool >*
+RepIfSuccessBatch::_internal_mutable_ifcommit() {
+  return &_impl_.ifcommit_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< bool >*
+RepIfSuccessBatch::mutable_ifcommit() {
+  // @@protoc_insertion_point(field_mutable_list:coordinator_proto.RepIfSuccessBatch.ifcommit)
+  return _internal_mutable_ifcommit();
+}
+
+// -------------------------------------------------------------------
+
 // KeyAndClientIP
 
 // string key = 1;
@@ -6825,6 +7380,10 @@ inline void MergeReply::set_parity_update_seconds(double value) {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

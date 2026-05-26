@@ -39,6 +39,10 @@ namespace ECProject
     int CoordinatorPort = 55555;
     std::string AppendMode = "EQUIOX_MODE";
     std::string CodeType = "RS";
+    /** When true: datanode fsyncs on append; evicts page cache before read. */
+    bool BenchDurableIO = false;
+    /** Seconds to sleep in main_client before timed reads (best-effort; use with BenchDurableIO). */
+    int BenchReadDelaySec = 30;
   };
 }
 

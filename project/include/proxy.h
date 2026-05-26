@@ -15,10 +15,21 @@
 #include <config.h>
 #include <toolbox.h>
 #include <queue>
+#include <deque>
+#include <condition_variable>
+#include <atomic>
 // #define IF_DEBUG true
 #define IF_DEBUG false
 namespace ECProject
 {
+  struct AppendPlanWait {
+    std::shared_ptr<proxy_proto::AppendStripeDataPlacement> placement;
+    bool done = false;
+    bool error = false;
+    std::mutex mtx;
+    std::condition_variable cv;
+  };
+
   class ProxyImpl final
       : public proxy_proto::proxyService::Service,
         public std::enable_shared_from_this<ECProject::ProxyImpl>
@@ -32,8 +43,9 @@ namespace ECProject
       m_ip = proxy_ip_port.substr(0, proxy_ip_port.find(':'));
       m_port = std::stoi(proxy_ip_port.substr(proxy_ip_port.find(':') + 1, proxy_ip_port.size()));
       std::cout << "Cluster id:" << m_self_cluster_id << std::endl;
+      start_data_acceptor_thread();
     }
-    ~ProxyImpl() {};
+    ~ProxyImpl();
     grpc::Status checkalive(
         grpc::ServerContext *context,
         const proxy_proto::CheckaliveCMD *request,
@@ -128,6 +140,12 @@ namespace ECProject
     void get_from_node_breakdown(const std::string &block_key, char *block_value, const size_t block_size, const char *datanode_ip, const int datanode_port, bool *status, int index, 
       double *disk_io_start_time, double *disk_io_end_time, double *network_start_time, double *network_end_time, double *grpc_notify_time, double *grpc_start_time);
 
+    void start_data_acceptor_thread();
+    void data_acceptor_loop();
+    bool process_append_plan_on_socket(
+        asio::ip::tcp::socket &socket_data,
+        const std::shared_ptr<AppendPlanWait> &waiter);
+
   private:
     std::mutex m_mutex;
     std::condition_variable cv;
@@ -144,6 +162,11 @@ namespace ECProject
     asio::ip::tcp::acceptor acceptor;
     sem_t sem;
     std::string m_coordinator_address;
+
+    std::mutex m_append_queue_mtx;
+    std::deque<std::shared_ptr<AppendPlanWait>> m_append_waiters;
+    std::thread m_data_acceptor_thread;
+    std::atomic<bool> m_data_acceptor_running{false};
   };
 
   class Proxy

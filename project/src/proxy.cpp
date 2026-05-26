@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 #include "encoder.h"
 #include <chrono>
+#include <future>
 template <typename T>
 inline T ceil(T const &A, T const &B)
 {
@@ -130,11 +131,27 @@ namespace ECProject
       datanode_proto::RequestResult result;
       append_info.set_block_key(std::string(block_key));
       append_info.set_block_id(block_id);
-      append_info.set_append_size(slice_size);
+      append_info.set_append_size(static_cast<int>(slice_size));
       append_info.set_append_offset(slice_offset);
       append_info.set_is_serialized(is_serialized);
       std::string node_ip_port = std::string(ip) + ":" + std::to_string(port);
-      grpc::Status stat = m_datanode_ptrs[node_ip_port]->handleAppend(&context, append_info, &result);
+
+      const bool durable = m_sys_config->BenchDurableIO;
+      std::future<grpc::Status> append_rpc;
+      if (durable)
+      {
+        append_rpc = std::async(std::launch::async, [this, &context, &append_info, &result, node_ip_port]() {
+          return m_datanode_ptrs[node_ip_port]->handleAppend(&context, append_info, &result);
+        });
+      }
+      else
+      {
+        grpc::Status stat = m_datanode_ptrs[node_ip_port]->handleAppend(&context, append_info, &result);
+        if (!stat.ok())
+        {
+          return false;
+        }
+      }
 
       asio::error_code error;
       asio::io_context io_context;
@@ -142,16 +159,36 @@ namespace ECProject
       asio::ip::tcp::resolver resolver(io_context);
       asio::error_code con_error;
       asio::connect(socket, resolver.resolve({std::string(ip), std::to_string(port + ECProject::DATANODE_PORT_SHIFT)}), con_error);
-      if (!con_error && IF_DEBUG)
+      if (con_error)
       {
-        std::cout << "Connect to " << ip << ":" << port + ECProject::DATANODE_PORT_SHIFT << " success! block_key: " << block_key << " block_id: " << block_id << " slice_size: " << slice_size << " slice_offset: " << slice_offset << " is_serialized: " << is_serialized << std::endl;
-      }
-      else if (IF_DEBUG)
-      {
-        std::cout << "Connect to " << ip << ":" << port + ECProject::DATANODE_PORT_SHIFT << " failed! block_key: " << block_key << " block_id: " << block_id << " slice_size: " << slice_size << " slice_offset: " << slice_offset << " is_serialized: " << is_serialized << std::endl;
-        exit(-1);
+        std::cout << "[Proxy" << m_self_cluster_id << "][Append] connect to " << ip << ":"
+                  << port + ECProject::DATANODE_PORT_SHIFT << " failed: " << con_error.message()
+                  << std::endl;
+        return false;
       }
       asio::write(socket, asio::buffer(slice_buf, slice_size), error);
+      if (error)
+      {
+        std::cout << "[Proxy" << m_self_cluster_id << "][Append] write failed: " << error.message()
+                  << std::endl;
+        return false;
+      }
+      if (durable)
+      {
+        char ack = 0;
+        asio::read(socket, asio::buffer(&ack, 1), error);
+        if (error || ack != 'D')
+        {
+          std::cout << "[Proxy" << m_self_cluster_id << "][Append] durable ack failed for "
+                    << block_key << std::endl;
+          return false;
+        }
+        const grpc::Status stat = append_rpc.get();
+        if (!stat.ok() || !result.message())
+        {
+          return false;
+        }
+      }
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
@@ -164,6 +201,7 @@ namespace ECProject
     catch (const std::exception &e)
     {
       std::cerr << e.what() << '\n';
+      return false;
     }
 
     return true;
@@ -548,145 +586,197 @@ namespace ECProject
     std::cout << "===================================" << std::endl;
   }
 
-  grpc::Status ProxyImpl::scheduleAppend2Datanode(
-      grpc::ServerContext *context,
-      const proxy_proto::AppendStripeDataPlacement *append_stripe_data_placement,
-      proxy_proto::SetReply *response)
+  ProxyImpl::~ProxyImpl()
   {
-    // printAppendStripeDataPlacement(append_stripe_data_placement);
+    m_data_acceptor_running.store(false);
+    acceptor.close();
+    if (m_data_acceptor_thread.joinable())
+    {
+      m_data_acceptor_thread.join();
+    }
+  }
 
-    int stripe_id = append_stripe_data_placement->stripe_id();
-    // sum of all append slices allocated to this proxy
-    size_t cluster_append_size = append_stripe_data_placement->append_size();
-    // number of slices allocated to this proxy
-    int slice_num = append_stripe_data_placement->blockkeys_size();
-    bool is_serialized = append_stripe_data_placement->is_serialized();
+  void ProxyImpl::start_data_acceptor_thread()
+  {
+    bool expected = false;
+    if (!m_data_acceptor_running.compare_exchange_strong(expected, true))
+    {
+      return;
+    }
+    m_data_acceptor_thread = std::thread(&ProxyImpl::data_acceptor_loop, this);
+  }
 
-    auto placement_copy = std::make_shared<proxy_proto::AppendStripeDataPlacement>(*append_stripe_data_placement);
-
-    auto append_and_save = [this, stripe_id, cluster_append_size, slice_num, placement_copy, is_serialized]() mutable
+  void ProxyImpl::data_acceptor_loop()
+  {
+    while (m_data_acceptor_running.load())
     {
       try
       {
         asio::ip::tcp::socket socket_data(io_context);
         acceptor.accept(socket_data);
-        asio::error_code error;
 
-        // assert(m_pre_allocated_buffer_queue.size() > 0 && "Pre-allocated buffer queue is empty");
-        // std::shared_ptr<char[]> append_buf = m_pre_allocated_buffer_queue.front();
-        // m_pre_allocated_buffer_queue.pop();
-        // char *append_buf = new char[cluster_append_size];
-        // memset(append_buf, 0, cluster_append_size);
-        // std::shared_ptr<char> append_buf_ptr(append_buf, [](char* p) { delete[] p; }); // 使用智能指针管理内存
-        std::vector<char> append_buf(cluster_append_size, 0);
-        asio::read(socket_data, asio::buffer(append_buf.data(), cluster_append_size), error);
-        if (error == asio::error::eof)
+        while (m_data_acceptor_running.load())
         {
-          std::cout << "error == asio::error::eof" << std::endl;
-        }
-        else if (error)
-        {
-          throw asio::system_error(error);
-        }
+          std::shared_ptr<AppendPlanWait> waiter;
+          {
+            std::lock_guard<std::mutex> lk(m_append_queue_mtx);
+            if (m_append_waiters.empty())
+            {
+              break;
+            }
+            waiter = m_append_waiters.front();
+            m_append_waiters.pop_front();
+          }
 
-        if (IF_DEBUG)
-        {
-          std::cout << "[Proxy" << m_self_cluster_id << "][Append339]"
-                    << "Append to Stripe " << stripe_id << " with length of " << cluster_append_size << std::endl;
+          if (!process_append_plan_on_socket(socket_data, waiter))
+          {
+            std::lock_guard<std::mutex> lk(waiter->mtx);
+            waiter->error = true;
+            waiter->done = true;
+            waiter->cv.notify_all();
+            break;
+          }
+
+          std::error_code avail_ec;
+          if (socket_data.available(avail_ec) == 0)
+          {
+            break;
+          }
         }
 
         asio::error_code ignore_ec;
         socket_data.shutdown(asio::ip::tcp::socket::shutdown_receive, ignore_ec);
         socket_data.close(ignore_ec);
-
-        std::vector<char *> slices = m_toolbox->splitCharPointer(append_buf.data(), placement_copy);
-
-        auto append_to_datanode = [this](const char *block_key, int block_id, size_t slice_size, const char *slice_buf, int slice_offset, const char *ip, int port, bool is_serialized)
-        {
-          if (IF_DEBUG)
-          {
-            std::cout << "[Proxy" << m_self_cluster_id << "][Append353]"
-                      << "Append to Block " << block_key << " of block_id " << block_id << " at the offset of " << slice_offset << " with length of " << slice_size << std::endl;
-          }
-          AppendToDatanode(block_key, block_id, slice_size, slice_buf, slice_offset, ip, port, is_serialized);
-        };
-
-        std::vector<std::thread> senders;
-        for (int j = 0; j < slice_num; j++)
-        {
-          senders.push_back(std::thread(append_to_datanode, placement_copy->blockkeys(j).c_str(), placement_copy->blockids(j), placement_copy->sizes(j), slices[j], placement_copy->offsets(j), placement_copy->datanodeip(j).c_str(), placement_copy->datanodeport(j), is_serialized));
-        }
-        for (int j = 0; j < int(senders.size()); j++)
-        {
-          senders[j].join();
-        }
-
-        if (IF_DEBUG)
-        {
-          std::cout << "[Proxy" << m_self_cluster_id << "][Append371]"
-                    << "Finish appending to Stripe " << stripe_id << std::endl;
-        }
-
-        if (placement_copy->is_merge_parity())
-        {
-          for (int j = 0; j < slice_num; j++)
-          {
-            if (placement_copy->blockids(j) >= m_sys_config->k)
-            {
-              MergeParityOnDatanode(placement_copy->blockkeys(j).c_str(), placement_copy->blockids(j), placement_copy->datanodeip(j).c_str(), placement_copy->datanodeport(j), placement_copy->append_mode());
-            }
-          }
-
-          if (IF_DEBUG)
-          {
-            std::cout << "[Proxy" << m_self_cluster_id << "][Append387]"
-                      << "Async merging parities of Stripe " << stripe_id << std::endl;
-          }
-        }
-
-        // report to coordinator
-        coordinator_proto::CommitAbortKey commit_abort_key;
-        coordinator_proto::ReplyFromCoordinator result;
-        grpc::ClientContext context;
-        ECProject::OpperateType opp = APPEND;
-        commit_abort_key.set_opp(opp);
-        commit_abort_key.set_key(placement_copy->key());
-        commit_abort_key.set_stripe_id(stripe_id);
-        commit_abort_key.set_ifcommitmetadata(true);
-        grpc::Status status;
-        status = m_coordinator_ptr->reportCommitAbort(&context, commit_abort_key, &result);
-        if (status.ok() && IF_DEBUG)
-        {
-          std::cout << "[Proxy" << m_self_cluster_id << "][APPEND405]"
-                    << " report to coordinator success" << std::endl;
-        }
-        else if (IF_DEBUG)
-        {
-          std::cout << "[Proxy" << m_self_cluster_id << "][APPEND410]"
-                    << " report to coordinator fail!" << std::endl;
-        }
       }
-      catch (std::exception &e)
+      catch (const std::exception &e)
       {
-        std::cout << "exception in append_and_save" << std::endl;
-        std::cout << e.what() << std::endl;
+        std::cout << "[Proxy" << m_self_cluster_id
+                  << "] data_acceptor_loop exception: " << e.what() << std::endl;
       }
-    };
+    }
+  }
+
+  bool ProxyImpl::process_append_plan_on_socket(
+      asio::ip::tcp::socket &socket_data,
+      const std::shared_ptr<AppendPlanWait> &waiter)
+  {
+    const auto &placement_copy = waiter->placement;
+    int stripe_id = placement_copy->stripe_id();
+    size_t cluster_append_size = placement_copy->append_size();
+    int slice_num = placement_copy->blockkeys_size();
+    bool is_serialized = placement_copy->is_serialized();
+
     try
     {
+      asio::error_code error;
+      std::vector<char> append_buf(cluster_append_size, 0);
+      asio::read(socket_data, asio::buffer(append_buf.data(), cluster_append_size),
+                 error);
+      if (error == asio::error::eof)
+      {
+        std::cout << "error == asio::error::eof" << std::endl;
+      }
+      else if (error)
+      {
+        throw asio::system_error(error);
+      }
+
       if (IF_DEBUG)
       {
-        std::cout << "[Proxy][APPEND424] Handle append_and_save" << std::endl;
+        std::cout << "[Proxy" << m_self_cluster_id << "][Append339]"
+                  << "Append to Stripe " << stripe_id << " with length of "
+                  << cluster_append_size << std::endl;
       }
-      std::thread my_thread(append_and_save);
-      my_thread.detach();
-    }
-    catch (std::exception &e)
-    {
-      std::cout << "exception" << std::endl;
-      std::cout << e.what() << std::endl;
-    }
 
+      std::vector<char *> slices =
+          m_toolbox->splitCharPointer(append_buf.data(), placement_copy);
+
+      auto append_to_datanode =
+          [this](const char *block_key, int block_id, size_t slice_size,
+                 const char *slice_buf, int slice_offset, const char *ip,
+                 int port, bool is_serialized) {
+            if (IF_DEBUG)
+            {
+              std::cout << "[Proxy" << m_self_cluster_id << "][Append353]"
+                        << "Append to Block " << block_key << " of block_id "
+                        << block_id << " at the offset of " << slice_offset
+                        << " with length of " << slice_size << std::endl;
+            }
+            AppendToDatanode(block_key, block_id, slice_size, slice_buf,
+                             slice_offset, ip, port, is_serialized);
+          };
+
+      std::vector<std::thread> senders;
+      for (int j = 0; j < slice_num; j++)
+      {
+        senders.push_back(std::thread(
+            append_to_datanode, placement_copy->blockkeys(j).c_str(),
+            placement_copy->blockids(j), placement_copy->sizes(j), slices[j],
+            placement_copy->offsets(j), placement_copy->datanodeip(j).c_str(),
+            placement_copy->datanodeport(j), is_serialized));
+      }
+      for (int j = 0; j < int(senders.size()); j++)
+      {
+        senders[j].join();
+      }
+
+      if (placement_copy->is_merge_parity())
+      {
+        for (int j = 0; j < slice_num; j++)
+        {
+          if (placement_copy->blockids(j) >= m_sys_config->k)
+          {
+            MergeParityOnDatanode(placement_copy->blockkeys(j).c_str(),
+                                  placement_copy->blockids(j),
+                                  placement_copy->datanodeip(j).c_str(),
+                                  placement_copy->datanodeport(j),
+                                  placement_copy->append_mode());
+          }
+        }
+      }
+
+      coordinator_proto::CommitAbortKey commit_abort_key;
+      coordinator_proto::ReplyFromCoordinator result;
+      grpc::ClientContext context;
+      ECProject::OpperateType opp = APPEND;
+      commit_abort_key.set_opp(opp);
+      commit_abort_key.set_key(placement_copy->key());
+      commit_abort_key.set_stripe_id(stripe_id);
+      commit_abort_key.set_ifcommitmetadata(true);
+      grpc::Status status =
+          m_coordinator_ptr->reportCommitAbort(&context, commit_abort_key, &result);
+
+      {
+        std::lock_guard<std::mutex> lk(waiter->mtx);
+        waiter->done = true;
+        waiter->cv.notify_all();
+      }
+      return status.ok();
+    }
+    catch (const std::exception &e)
+    {
+      std::cout << "exception in process_append_plan_on_socket" << std::endl;
+      std::cout << e.what() << std::endl;
+      return false;
+    }
+  }
+
+  grpc::Status ProxyImpl::scheduleAppend2Datanode(
+      grpc::ServerContext *context,
+      const proxy_proto::AppendStripeDataPlacement *append_stripe_data_placement,
+      proxy_proto::SetReply *response)
+  {
+    (void)context;
+    (void)response;
+    start_data_acceptor_thread();
+    auto placement_copy = std::make_shared<proxy_proto::AppendStripeDataPlacement>(
+        *append_stripe_data_placement);
+    auto waiter = std::make_shared<AppendPlanWait>();
+    waiter->placement = placement_copy;
+    {
+      std::lock_guard<std::mutex> lk(m_append_queue_mtx);
+      m_append_waiters.push_back(waiter);
+    }
     return grpc::Status::OK;
   }
 

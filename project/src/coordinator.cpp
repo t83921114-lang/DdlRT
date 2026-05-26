@@ -1174,13 +1174,13 @@ grpc::Status CoordinatorImpl::uploadAppendValue(
     m_mutex.unlock();
   }
 
-  // 3. notify proxies to receive data
-  // need multiple proxies to receive data, so need multiple threads
-  std::vector<std::thread> threads;
+  // 3. notify proxies to receive data (sequential enqueue preserves per-proxy FIFO)
   int sum_append_size = 0;
   for (const auto &plan : append_plans) {
-    threads.push_back(
-        std::thread(&CoordinatorImpl::notify_proxies_ready, this, plan));
+    if (!notify_proxies_ready(plan)) {
+      return grpc::Status(grpc::StatusCode::UNAVAILABLE,
+                          "proxy failed to accept append plan");
+    }
     proxyIPPort->add_append_keys(plan.key());
     proxyIPPort->add_proxyips(m_cluster_table[plan.cluster_id()].proxy_ip);
     proxyIPPort->add_proxyports(
@@ -1188,9 +1188,6 @@ grpc::Status CoordinatorImpl::uploadAppendValue(
         ECProject::PROXY_PORT_SHIFT); // use another port to accept data
     proxyIPPort->add_cluster_slice_sizes(plan.append_size());
     sum_append_size += plan.append_size();
-  }
-  for (auto &thread : threads) {
-    thread.join();
   }
   proxyIPPort->set_sum_append_size(sum_append_size);
 
@@ -1367,14 +1364,11 @@ grpc::Status CoordinatorImpl::uploadSetValue(
       m_mutex.unlock();
     }
 
-    std::vector<std::thread> threads;
     std::vector<bool> proxy_ok(add_plans.size(), false);
     size_t sum_append_size = 0;
     for (size_t i = 0; i < add_plans.size(); i++) {
       const auto &plan = add_plans[i];
-      threads.push_back(std::thread([this, plan, &proxy_ok, i]() {
-        proxy_ok[i] = notify_proxies_ready(plan);
-      }));
+      proxy_ok[i] = notify_proxies_ready(plan);
       proxyIPPort->add_append_keys(plan.key());
       proxyIPPort->add_proxyips(m_cluster_table[plan.cluster_id()].proxy_ip);
       proxyIPPort->add_proxyports(
@@ -1382,9 +1376,6 @@ grpc::Status CoordinatorImpl::uploadSetValue(
           ECProject::PROXY_PORT_SHIFT); // use another port to accept data
       proxyIPPort->add_cluster_slice_sizes(plan.append_size());
       sum_append_size += plan.append_size();
-    }
-    for (auto &thread : threads) {
-      thread.join();
     }
     bool all_proxy_ok = std::all_of(proxy_ok.begin(), proxy_ok.end(), [](bool b) { return b; });
     if (!all_proxy_ok) {
@@ -1443,23 +1434,19 @@ grpc::Status CoordinatorImpl::uploadSubsetValue(
     m_mutex.unlock();
   }
 
-  std::vector<std::thread> threads;
   size_t sum_append_size = 0;
   for (const auto &plan : add_plans) {
-    threads.push_back(
-        std::thread(&CoordinatorImpl::notify_proxies_ready, this, plan));
+    if (!notify_proxies_ready(plan)) {
+      return grpc::Status(grpc::StatusCode::UNAVAILABLE,
+                          "one or more proxies failed to accept placement plan");
+    }
     proxyIPPort->add_append_keys(plan.key());
     proxyIPPort->add_proxyips(m_cluster_table[plan.cluster_id()].proxy_ip);
     proxyIPPort->add_proxyports(
         m_cluster_table[plan.cluster_id()].proxy_port +
         ECProject::PROXY_PORT_SHIFT); // use another port to accept data
     proxyIPPort->add_cluster_slice_sizes(plan.append_size());
-    // proxyIPPort->add_group_ids(group_id);
     sum_append_size += plan.append_size();
-    // group_id++;
-  }
-  for (auto &thread : threads) {
-    thread.join();
   }
   proxyIPPort->set_sum_append_size(sum_append_size);
 
@@ -3666,14 +3653,10 @@ grpc::Status CoordinatorImpl::reportCommitAbort(
   return grpc::Status::OK;
 }
 
-grpc::Status CoordinatorImpl::checkCommitAbort(
-    grpc::ServerContext *context,
-    const coordinator_proto::AskIfSuccess *key_opp,
-    coordinator_proto::RepIfSuccess *reply) {
-  std::unique_lock<std::mutex> lck(m_mutex);
-  std::string key = key_opp->key();
-  ECProject::OpperateType opp = (ECProject::OpperateType)key_opp->opp();
-  int stripe_id = key_opp->stripe_id();
+void CoordinatorImpl::wait_for_object_commit(std::unique_lock<std::mutex> &lck,
+                                             const std::string &key,
+                                             ECProject::OpperateType opp,
+                                             int stripe_id) {
   if (opp == SET || opp == APPEND) {
     while (m_object_commit_table.find(key) == m_object_commit_table.end()) {
       cv.wait(lck);
@@ -3693,7 +3676,36 @@ grpc::Status CoordinatorImpl::checkCommitAbort(
       }
     }
   }
+}
+
+grpc::Status CoordinatorImpl::checkCommitAbort(
+    grpc::ServerContext *context,
+    const coordinator_proto::AskIfSuccess *key_opp,
+    coordinator_proto::RepIfSuccess *reply) {
+  (void)context;
+  std::unique_lock<std::mutex> lck(m_mutex);
+  std::string key = key_opp->key();
+  ECProject::OpperateType opp = (ECProject::OpperateType)key_opp->opp();
+  int stripe_id = key_opp->stripe_id();
+  wait_for_object_commit(lck, key, opp, stripe_id);
   reply->set_ifcommit(true);
+  return grpc::Status::OK;
+}
+
+grpc::Status CoordinatorImpl::checkCommitAbortBatch(
+    grpc::ServerContext *context,
+    const coordinator_proto::AskIfSuccessBatch *request,
+    coordinator_proto::RepIfSuccessBatch *reply) {
+  (void)context;
+  std::unique_lock<std::mutex> lck(m_mutex);
+  ECProject::OpperateType opp = (ECProject::OpperateType)request->opp();
+  int stripe_id = request->stripe_id();
+  reply->clear_ifcommit();
+  for (int i = 0; i < request->keys_size(); i++) {
+    wait_for_object_commit(lck, request->keys(i), opp, stripe_id);
+    reply->add_ifcommit(true);
+  }
+  reply->set_all_committed(true);
   return grpc::Status::OK;
 }
 

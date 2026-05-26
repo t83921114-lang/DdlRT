@@ -29,6 +29,7 @@ service coordinatorService {
   rpc uploadOriginKeyValue (RequestProxyIPPort) returns (ReplyProxyIPPort) {};
   rpc reportCommitAbort (CommitAbortKey) returns (ReplyFromCoordinator) {}; //from proxy
   rpc checkCommitAbort (AskIfSuccess) returns (RepIfSuccess) {};  //from client
+  rpc checkCommitAbortBatch (AskIfSuccessBatch) returns (RepIfSuccessBatch) {};  //from client
   rpc uploadSetValue (RequestProxyIPPort) returns (ReplyProxyIPsPorts) {};
   rpc uploadSubsetValue (RequestProxyIPPort) returns (ReplyProxyIPsPorts) {};
   // append
@@ -128,6 +129,17 @@ message AskIfSuccess {
 
 message RepIfSuccess {
   bool ifcommit = 1;
+}
+
+message AskIfSuccessBatch {
+  repeated string keys = 1;
+  int32 opp = 2;
+  int32 stripe_id = 3;
+}
+
+message RepIfSuccessBatch {
+  bool all_committed = 1;
+  repeated bool ifcommit = 2;
 }
 
 // get

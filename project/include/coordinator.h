@@ -55,6 +55,10 @@ namespace ECProject
         grpc::ServerContext *context,
         const coordinator_proto::AskIfSuccess *key_opp,
         coordinator_proto::RepIfSuccess *reply) override;
+    grpc::Status checkCommitAbortBatch(
+        grpc::ServerContext *context,
+        const coordinator_proto::AskIfSuccessBatch *request,
+        coordinator_proto::RepIfSuccessBatch *reply) override;
     grpc::Status uploadSetValue(
         grpc::ServerContext *context,
         const coordinator_proto::RequestProxyIPPort *keyValueSize,
@@ -204,6 +208,9 @@ namespace ECProject
     std::vector<int> get_data_block_num_per_group(int k, int r, int z, std::string code_type);
 
   private:
+    void wait_for_object_commit(std::unique_lock<std::mutex> &lck,
+                                const std::string &key,
+                                ECProject::OpperateType opp, int stripe_id);
     std::mutex m_mutex;
     std::vector<std::vector<int>> Get_OA_Information(const std::string& filename);
     std::condition_variable cv;

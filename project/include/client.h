@@ -13,6 +13,8 @@
 #include "config.h"
 #include "toolbox.h"
 #include <vector>
+#include <map>
+#include <mutex>
 namespace ECProject
 {
   class Client
@@ -92,6 +94,14 @@ namespace ECProject
     void split_for_append_data_and_parity(const coordinator_proto::ReplyProxyIPsPorts *reply_proxy_ips_ports, const std::vector<char *> &cluster_slice_data, const std::vector<std::vector<int>> &node_slice_sizes_per_cluster, const std::vector<int> &modified_data_block_nums_per_cluster, std::vector<char *> &data_ptr_array, std::vector<char *> &global_parity_ptr_array, std::vector<char *> &local_parity_ptr_array);
     void split_for_set_data_and_parity(const coordinator_proto::ReplyProxyIPsPorts *reply_proxy_ips_ports, const std::vector<char *> &cluster_slice_data, const std::vector<int> &data_block_num_per_group, const std::vector<int> &global_parity_block_num_per_group, const std::vector<int> &local_parity_block_num_per_group, std::vector<char *> &data_ptr_array, std::vector<char *> &global_parity_ptr_array, std::vector<char *> &local_parity_ptr_array);
     void async_append_to_proxies(char *cluster_slice_data, std::string append_key, int cluster_slice_size, std::string proxy_ip, int proxy_port, int index, bool *if_commit_arr);
+    bool write_slices_to_proxy_endpoint(const std::string &proxy_ip, int proxy_port,
+                                        const std::vector<std::pair<char *, size_t>> &slices);
+    bool send_cluster_slices_and_commit(const coordinator_proto::ReplyProxyIPsPorts &reply,
+                                        const std::vector<char *> &cluster_slice_data,
+                                        ECProject::OpperateType commit_opp);
+    bool batch_check_commit_abort(const std::vector<std::string> &keys,
+                                  ECProject::OpperateType opp, int stripe_id = 0);
+    static std::string proxy_endpoint_key(const std::string &proxy_ip, int proxy_port);
     void get_cached_parity_slices(std::vector<char *> &global_parity_ptr_array, std::vector<char *> &local_parity_ptr_array, const int parity_slice_size, const int parity_slice_offset);
     void cache_latest_parity_slices(std::vector<char *> &global_parity_ptr_array, std::vector<char *> &local_parity_ptr_array, const int parity_slice_size, const int parity_slice_offset);
     std::vector<int> get_parameters();
@@ -112,6 +122,8 @@ namespace ECProject
     ECProject::ToolBox *m_toolbox;
     char *m_pre_allocated_buffer = nullptr;
     char **m_cached_buffer = nullptr;
+    std::mutex m_proxy_tcp_mutex;
+    std::map<std::string, asio::ip::tcp::resolver::results_type> m_proxy_endpoint_cache;
   };
 
 } // namespace ECProject

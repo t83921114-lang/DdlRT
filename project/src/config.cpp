@@ -119,6 +119,13 @@ namespace ECProject
       CoordinatorPort = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("AppendMode"))
       AppendMode = std::string(elem->GetText());
+    if (auto elem = root->FirstChildElement("BenchDurableIO"))
+    {
+      const std::string v = elem->GetText();
+      BenchDurableIO = (v == "1" || v == "true" || v == "TRUE" || v == "yes");
+    }
+    if (auto elem = root->FirstChildElement("BenchReadDelaySec"))
+      BenchReadDelaySec = std::stoi(elem->GetText());
     N = get_N(); // 获得N
     get_num_arry();
   }
@@ -140,6 +147,8 @@ namespace ECProject
     std::cout << "  CoordinatorIP: " << CoordinatorIP << std::endl;
     std::cout << "  CoordinatorPort: " << CoordinatorPort << std::endl;
     std::cout << "  AppendMode: " << AppendMode << std::endl;
+    std::cout << "  BenchDurableIO: " << (BenchDurableIO ? "true" : "false") << std::endl;
+    std::cout << "  BenchReadDelaySec: " << BenchReadDelaySec << std::endl;
     std::cout << "  CodeType: " << CodeType << std::endl;
   }
   int Config::get_N()

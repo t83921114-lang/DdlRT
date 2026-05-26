@@ -326,45 +326,155 @@ namespace ECProject
     return true;
   }*/
 
-  void Client::async_append_to_proxies(char *cluster_slice_data, std::string append_key, int cluster_slice_size, std::string proxy_ip, int proxy_port, int index, bool *if_commit_arr)
+  std::string Client::proxy_endpoint_key(const std::string &proxy_ip, int proxy_port)
   {
-    // std::cout << "[Append174] Appending size " << cluster_slice_size << " to proxy_address:" << proxy_ip << ":" << proxy_port << std::endl;
-    asio::io_context io_context;
-    asio::error_code error;
-    asio::ip::tcp::resolver resolver(io_context);
-    asio::ip::tcp::resolver::results_type endpoints =
-        resolver.resolve(proxy_ip, std::to_string(proxy_port));
-    asio::ip::tcp::socket sock_data(io_context);
-    asio::connect(sock_data, endpoints);
+    return proxy_ip + ":" + std::to_string(proxy_port);
+  }
 
-    asio::write(sock_data, asio::buffer(cluster_slice_data, cluster_slice_size), error);
+  bool Client::write_slices_to_proxy_endpoint(
+      const std::string &proxy_ip, int proxy_port,
+      const std::vector<std::pair<char *, size_t>> &slices)
+  {
+    if (slices.empty())
+    {
+      return true;
+    }
+    const std::string ep = proxy_endpoint_key(proxy_ip, proxy_port);
+    std::lock_guard<std::mutex> lock(m_proxy_tcp_mutex);
+    if (m_proxy_endpoint_cache.find(ep) == m_proxy_endpoint_cache.end())
+    {
+      asio::ip::tcp::resolver resolver(io_context);
+      m_proxy_endpoint_cache[ep] =
+          resolver.resolve(proxy_ip, std::to_string(proxy_port));
+    }
+    asio::ip::tcp::socket sock_data(io_context);
+    asio::error_code error;
+    asio::connect(sock_data, m_proxy_endpoint_cache[ep], error);
+    if (error)
+    {
+      std::cout << "[Client] connect to " << ep << " failed: " << error.message()
+                << std::endl;
+      return false;
+    }
+    for (const auto &slice : slices)
+    {
+      asio::write(sock_data, asio::buffer(slice.first, slice.second), error);
+      if (error)
+      {
+        std::cout << "[Client] write to " << ep << " failed: " << error.message()
+                  << std::endl;
+        return false;
+      }
+    }
     asio::error_code ignore_ec;
     sock_data.shutdown(asio::ip::tcp::socket::shutdown_send, ignore_ec);
     sock_data.close(ignore_ec);
+    return true;
+  }
 
-    // check if metadata is saved successfully
-    grpc::ClientContext check_commit;
-    coordinator_proto::AskIfSuccess request;
-    request.set_key(append_key);
-    OpperateType opp = APPEND;
-    request.set_opp(opp);
-    coordinator_proto::RepIfSuccess reply;
-    grpc::Status status;
-    status = m_coordinator_ptr->checkCommitAbort(&check_commit, request, &reply);
-    if (status.ok())
+  bool Client::batch_check_commit_abort(const std::vector<std::string> &keys,
+                                        ECProject::OpperateType opp,
+                                        int stripe_id)
+  {
+    if (keys.empty())
     {
-      if (reply.ifcommit())
-      {
-        if_commit_arr[index] = true;
-      }
-      else
-      {
-        std::cout << "[APPEND205] " << append_key << " not commit!!!!!" << " cluster_slice_size: " << cluster_slice_size << " proxy_ip: " << proxy_ip << " proxy_port: " << proxy_port << std::endl;
-      }
+      return true;
     }
-    else
+    grpc::ClientContext check_commit;
+    coordinator_proto::AskIfSuccessBatch request;
+    for (const auto &key : keys)
     {
-      std::cout << "[APPEND210] " << append_key << " Fail to check!!!!!" << " cluster_slice_size: " << cluster_slice_size << " proxy_ip: " << proxy_ip << " proxy_port: " << proxy_port << std::endl;
+      request.add_keys(key);
+    }
+    request.set_opp(opp);
+    request.set_stripe_id(stripe_id);
+    coordinator_proto::RepIfSuccessBatch reply;
+    grpc::Status status =
+        m_coordinator_ptr->checkCommitAbortBatch(&check_commit, request, &reply);
+    if (!status.ok())
+    {
+      std::cout << "[Client] checkCommitAbortBatch failed: "
+                << status.error_message() << std::endl;
+      return false;
+    }
+    return reply.all_committed();
+  }
+
+  bool Client::send_cluster_slices_and_commit(
+      const coordinator_proto::ReplyProxyIPsPorts &reply,
+      const std::vector<char *> &cluster_slice_data, ECProject::OpperateType commit_opp)
+  {
+    const int n_slices = reply.append_keys_size();
+    if (n_slices == 0)
+    {
+      return true;
+    }
+
+    std::map<std::string, std::vector<int>> indices_by_endpoint;
+    for (int i = 0; i < n_slices; i++)
+    {
+      indices_by_endpoint[proxy_endpoint_key(reply.proxyips(i), reply.proxyports(i))]
+          .push_back(i);
+    }
+
+    std::vector<std::thread> send_threads;
+    std::vector<bool> send_ok(n_slices, false);
+    for (const auto &ep_entry : indices_by_endpoint)
+    {
+      send_threads.emplace_back([this, &reply, &cluster_slice_data, &send_ok,
+                                 indices = ep_entry.second]() {
+        std::vector<std::pair<char *, size_t>> slices;
+        slices.reserve(indices.size());
+        for (int idx : indices)
+        {
+          slices.emplace_back(cluster_slice_data[idx],
+                              static_cast<size_t>(reply.cluster_slice_sizes(idx)));
+        }
+        const bool ok = write_slices_to_proxy_endpoint(
+            reply.proxyips(indices.front()), reply.proxyports(indices.front()),
+            slices);
+        for (int idx : indices)
+        {
+          send_ok[idx] = ok;
+        }
+      });
+    }
+    for (auto &t : send_threads)
+    {
+      t.join();
+    }
+    if (!std::all_of(send_ok.begin(), send_ok.end(),
+                     [](bool v) { return v; }))
+    {
+      return false;
+    }
+
+    std::vector<std::string> keys;
+    keys.reserve(static_cast<size_t>(n_slices));
+    for (int i = 0; i < n_slices; i++)
+    {
+      keys.push_back(reply.append_keys(i));
+    }
+    return batch_check_commit_abort(keys, commit_opp);
+  }
+
+  void Client::async_append_to_proxies(char *cluster_slice_data, std::string append_key, int cluster_slice_size, std::string proxy_ip, int proxy_port, int index, bool *if_commit_arr)
+  {
+    const std::vector<std::pair<char *, size_t>> slices = {
+        {cluster_slice_data, static_cast<size_t>(cluster_slice_size)}};
+    if (!write_slices_to_proxy_endpoint(proxy_ip, proxy_port, slices))
+    {
+      if_commit_arr[index] = false;
+      return;
+    }
+    if_commit_arr[index] =
+        batch_check_commit_abort({append_key}, APPEND);
+    if (!if_commit_arr[index])
+    {
+      std::cout << "[APPEND205] " << append_key << " not commit!!!!!"
+                << " cluster_slice_size: " << cluster_slice_size
+                << " proxy_ip: " << proxy_ip << " proxy_port: " << proxy_port
+                << std::endl;
     }
   }
 
@@ -747,10 +857,7 @@ namespace ECProject
     }
     else
     {
-      std::vector<std::thread> threads;
       std::vector<char *> cluster_slice_data = m_toolbox->splitCharPointer(m_pre_allocated_buffer, &reply);
-      std::unique_ptr<bool[]> if_commit_arr(new bool[reply.append_keys_size()]);
-      std::fill_n(if_commit_arr.get(), reply.append_keys_size(), false);
 
       assert(m_sys_config->CodeType == "UniLRC" || m_sys_config->CodeType == "OptimalLRC" || m_sys_config->CodeType == "UniformLRC" || m_sys_config->CodeType == "AzureLRC" || m_sys_config->CodeType == "RS");
       std::vector<int> data_block_num_per_group;
@@ -798,30 +905,13 @@ namespace ECProject
         //ECProject::encode_azure_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, reinterpret_cast<unsigned char **>(data_ptr_array.data()), reinterpret_cast<unsigned char **>(global_parity_ptr_array.data()), reinterpret_cast<unsigned char **>(local_parity_ptr_array.data()), m_sys_config->BlockSize);
         ECProject::encode_rs(m_sys_config->k, m_sys_config->r, m_sys_config->z, reinterpret_cast<unsigned char **>(data_ptr_array.data()), reinterpret_cast<unsigned char **>(parity_ptr_array.data()), m_sys_config->BlockSize);
       }
-      for (int i = 0; i < reply.append_keys_size(); i++)
-      {
-        threads.push_back(std::thread(&Client::async_append_to_proxies,
-                                      this, cluster_slice_data[i], reply.append_keys(i), reply.cluster_slice_sizes(i), reply.proxyips(i), reply.proxyports(i), i, if_commit_arr.get()));
-      }
-      for (auto &thread : threads)
-      {
-        thread.join();
-      }
-
-      // check if all appends are successful
-      bool all_true = std::all_of(if_commit_arr.get(), if_commit_arr.get() + reply.append_keys_size(), [](bool val)
-                                  { return val == true; });
-
-      if (all_true)
+      if (send_cluster_slices_and_commit(reply, cluster_slice_data, APPEND))
       {
         std::cout << "[SET437] Client " << m_clientID << " set successfully!" << std::endl;
         return true;
       }
-      else
-      {
-        std::cout << "[SET441] Client " << m_clientID << " set failed!" << std::endl;
-        return false;
-      }
+      std::cout << "[SET441] Client " << m_clientID << " set failed!" << std::endl;
+      return false;
     }
 
     return false;
@@ -845,10 +935,7 @@ namespace ECProject
     }
     else
     {
-      std::vector<std::thread> threads;
       std::vector<char *> cluster_slice_data = m_toolbox->splitCharPointer(m_pre_allocated_buffer, &reply);
-      std::unique_ptr<bool[]> if_commit_arr(new bool[reply.append_keys_size()]);
-      std::fill_n(if_commit_arr.get(), reply.append_keys_size(), false);
 
       assert(m_sys_config->CodeType == "UniLRC" || m_sys_config->CodeType == "OptimalLRC" || m_sys_config->CodeType == "UniformLRC" || m_sys_config->CodeType == "AzureLRC");
       std::vector<int> data_block_num_per_group = get_data_block_num_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, m_sys_config->CodeType);
@@ -889,29 +976,7 @@ namespace ECProject
         //ECProject::encode_azure_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, reinterpret_cast<unsigned char **>(data_ptr_array.data()), reinterpret_cast<unsigned char **>(global_parity_ptr_array.data()), reinterpret_cast<unsigned char **>(local_parity_ptr_array.data()), m_sys_config->BlockSize);
         ECProject::partial_encode_azure_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, block_num, reinterpret_cast<unsigned char **>(data_ptr_array.data()), reinterpret_cast<unsigned char **>(parity_ptr_array.data()), m_sys_config->BlockSize);
       }
-      for (int i = 0; i < reply.append_keys_size(); i++)
-      {
-        threads.push_back(std::thread(&Client::async_append_to_proxies,
-                                      this, cluster_slice_data[i], reply.append_keys(i), reply.cluster_slice_sizes(i), reply.proxyips(i), reply.proxyports(i), i, if_commit_arr.get()));
-      }
-      for (auto &thread : threads)
-      {
-        thread.join();
-      }
-
-      // check if all appends are successful
-      bool all_true = std::all_of(if_commit_arr.get(), if_commit_arr.get() + reply.append_keys_size(), [](bool val)
-                                  { return val == true; });
-
-      if (all_true)
-      {
-        return true;
-      }
-      else
-      {
-        std::cout << "[SET441] Client " << m_clientID << " set failed!" << std::endl;
-        return false;
-      }
+      return send_cluster_slices_and_commit(reply, cluster_slice_data, APPEND);
     }
 
     return false;
@@ -1141,30 +1206,28 @@ namespace ECProject
     int block_size = m_sys_config->BlockSize;
     //char * data_ptr_array = new char[static_cast<size_t>(block_num) * static_cast<size_t>(block_size)];
     std::shared_ptr<char[]> data_ptr_array(new char[static_cast<size_t>(block_num) * static_cast<size_t>(block_size)]);
-    char * data_ptr_array_raw = data_ptr_array.get();//这个是分配了接受任务的缓存区
-    std::vector<std::thread> threads;
-    for(int i = 0; i < block_num; i++)
+    char *data_ptr_array_raw = data_ptr_array.get();
+
+    // One acceptor: accept connections sequentially (do not spawn one thread per block).
+    for (int i = 0; i < block_num; i++)
     {
-      threads.push_back(std::thread(([this, &reply, i, data_ptr_array_raw, block_size]()mutable {
-        asio::io_context io_context;
-        asio::ip::tcp::socket socket_data(io_context);
-        this->acceptor.accept(socket_data);
-        uint32_t block_id;
-        asio::read(socket_data, asio::buffer(&block_id, sizeof(uint32_t)));
-        asio::error_code error;
-        size_t len = asio::read(socket_data, asio::buffer(data_ptr_array_raw + block_id * static_cast<size_t>(block_size), block_size), error);
-        if(len != block_size)
-        {
-          std::cout << "[Client] get blocks failed!" << std::endl;
-        }
-        asio::error_code ignore_ec;
-        socket_data.shutdown(asio::ip::tcp::socket::shutdown_receive, ignore_ec);
-        socket_data.close(ignore_ec);
-      })));
-    }
-    for(auto &thread : threads)
-    {
-      thread.join();
+      asio::ip::tcp::socket socket_data(io_context);
+      acceptor.accept(socket_data);
+      uint32_t block_id = 0;
+      asio::read(socket_data, asio::buffer(&block_id, sizeof(uint32_t)));
+      asio::error_code error;
+      size_t len = asio::read(
+          socket_data,
+          asio::buffer(data_ptr_array_raw + block_id * static_cast<size_t>(block_size),
+                       static_cast<size_t>(block_size)),
+          error);
+      if (len != static_cast<size_t>(block_size))
+      {
+        std::cout << "[Client] get blocks failed for block_id " << block_id << std::endl;
+      }
+      asio::error_code ignore_ec;
+      socket_data.shutdown(asio::ip::tcp::socket::shutdown_receive, ignore_ec);
+      socket_data.close(ignore_ec);
     }
     notify_thread.join();
     if (!is_get_blocks)
@@ -1204,30 +1267,27 @@ namespace ECProject
     int block_size = m_sys_config->BlockSize;
     //char * data_ptr_array = new char[static_cast<size_t>(block_num) * static_cast<size_t>(block_size)];
     std::shared_ptr<char[]> data_ptr_array(new char[static_cast<size_t>(block_num) * static_cast<size_t>(block_size)]);
-    char * data_ptr_array_raw = data_ptr_array.get();
-    std::vector<std::thread> threads;
-    for(int i = 0; i < block_num; i++)
+    char *data_ptr_array_raw = data_ptr_array.get();
+    for (int i = 0; i < block_num; i++)
     {
-      threads.push_back(std::thread(([this, &reply, i, data_ptr_array_raw, block_size]()mutable {
-        asio::io_context io_context;
-        asio::ip::tcp::socket socket_data(io_context);
-        this->acceptor.accept(socket_data);
-        uint32_t block_id;
-        asio::read(socket_data, asio::buffer(&block_id, sizeof(uint32_t)));
-        asio::error_code error;
-        size_t len = asio::read(socket_data, asio::buffer(data_ptr_array_raw + block_id * static_cast<size_t>(block_size), block_size), error);
-        if(len != block_size)
-        {
-          std::cout << "[Client] get blocks failed!" << std::endl;
-        }
-        asio::error_code ignore_ec;
-        socket_data.shutdown(asio::ip::tcp::socket::shutdown_receive, ignore_ec);
-        socket_data.close(ignore_ec);
-      })));
-    }
-    for(auto &thread : threads)
-    {
-      thread.join();
+      asio::ip::tcp::socket socket_data(io_context);
+      acceptor.accept(socket_data);
+      uint32_t block_id = 0;
+      asio::read(socket_data, asio::buffer(&block_id, sizeof(uint32_t)));
+      asio::error_code error;
+      size_t len = asio::read(
+          socket_data,
+          asio::buffer(data_ptr_array_raw + block_id * static_cast<size_t>(block_size),
+                       static_cast<size_t>(block_size)),
+          error);
+      if (len != static_cast<size_t>(block_size))
+      {
+        std::cout << "[Client] get degraded read blocks failed for block_id "
+                  << block_id << std::endl;
+      }
+      asio::error_code ignore_ec;
+      socket_data.shutdown(asio::ip::tcp::socket::shutdown_receive, ignore_ec);
+      socket_data.close(ignore_ec);
     }
     notify_thread.join();
     if (!is_get_blocks)

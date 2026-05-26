@@ -15,6 +15,10 @@
     <!-- Coordinator listens on 0.0.0.0:CoordinatorPort. Proxies use port from clusterInformation.xml; data port = proxy_port+1. Start proxy as: ./run_proxy <ip>:50405 -->
     <!-- AppendMode: REP_MODE; UNILRC_MODE; CACHED_MODE -->
     <AppendMode>EQUIOX_MODE</AppendMode>
+    <!-- Benchmark durable end-to-end I/O: fsync on write, page-cache eviction on read. -->
+    <BenchDurableIO>true</BenchDurableIO>
+    <!-- Sleep before read in main_client; fadvise is primary cold-read mechanism. -->
+    <BenchReadDelaySec>30</BenchReadDelaySec>
     <alpha>2</alpha>
     <!-- LRC: UniLRC; AzureLRC; OptimalLRC; UniformLRC -->
     <CodeType>RS</CodeType>

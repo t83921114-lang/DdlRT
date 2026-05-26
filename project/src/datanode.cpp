@@ -3,8 +3,46 @@
 #include "encoder.h"
 #include <fstream>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <chrono>
+
+namespace {
+
+constexpr char kAppendDurableAck = 'D';
+
+bool durable_fsync_file(const std::string &path)
+{
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0)
+    {
+        return false;
+    }
+    const bool ok = (fsync(fd) == 0);
+    close(fd);
+    return ok;
+}
+
+void evict_file_page_cache(const std::string &path)
+{
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0)
+    {
+        return;
+    }
+    posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+    close(fd);
+}
+
+void send_append_durable_ack(asio::ip::tcp::socket &socket)
+{
+    asio::error_code ec;
+    const char ack = kAppendDurableAck;
+    asio::write(socket, asio::buffer(&ack, 1), ec);
+}
+
+} // namespace
+
 namespace ECProject
 {
     grpc::Status DatanodeImpl::checkalive(
@@ -141,20 +179,13 @@ namespace ECProject
             try
             {
                 std::vector<char> buf(append_size);
-                // only send data
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
                 asio::read(socket, asio::buffer(buf.data(), append_size), ec);
 
-                asio::error_code ignore_ec;
-                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
-                socket.close(ignore_ec);
-
                 std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
                 std::string writepath = targetdir + block_key;
-
-                // std::cout << "[Datanode" << m_port << "][Append101] writepath: " << writepath << " append_offset: " << append_offset << " append_size: " << append_size << std::endl;
 
                 if (access(targetdir.c_str(), 0) == -1)
                 {
@@ -163,17 +194,12 @@ namespace ECProject
 
                 if (append_offset == 0)
                 {
-                    // std::cout << "create data block file with path: " << writepath << std::endl;
                     assert(access(writepath.c_str(), 0) == -1 && "File already exists with append_offset == 0!");
-                    // Create new file if append_offset is 0
                     std::ofstream create_file(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
                     create_file.close();
                 }
 
-                // Open file in append mode
-                // write the data to the disk using pagecache
                 std::ofstream append_file(writepath, std::ios::binary | std::ios::out | std::ios::app);
-                // Append data from buffer to end of file
                 append_file.write(buf.data(), append_size);
                 if (IF_DEBUG)
                 {
@@ -181,6 +207,14 @@ namespace ECProject
                 }
                 append_file.flush();
                 append_file.close();
+                if (m_sys_config->BenchDurableIO)
+                {
+                    durable_fsync_file(writepath);
+                    send_append_durable_ack(socket);
+                }
+                asio::error_code ignore_ec;
+                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+                socket.close(ignore_ec);
             }
             catch (const std::exception &e)
             {
@@ -188,26 +222,18 @@ namespace ECProject
             }
         };
 
-        // append_offset must be the physical offset of the block
         auto ParityBlockHandler = [this](std::string block_key, int append_size, int append_offset, bool is_serialized) mutable
         {
             try
             {
                 char *buf = new char[append_size];
-                // only send data
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
                 asio::read(socket, asio::buffer(buf, append_size), ec);
 
-                asio::error_code ignore_ec;
-                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
-                socket.close(ignore_ec);
-
                 std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
                 std::string writepath = targetdir + block_key;
-
-                // std::cout << "[Datanode" << m_port << "][Append101] writepath: " << writepath << " append_offset: " << append_offset << " append_size: " << append_size << std::endl;
 
                 if (access(targetdir.c_str(), 0) == -1)
                 {
@@ -216,13 +242,10 @@ namespace ECProject
 
                 if (append_offset == 0 && access(writepath.c_str(), 0) == -1)
                 {
-                    // std::cout << "create parity block file with path: " << writepath << std::endl;
-                    // Create new file if append_offset is 0 and file does not exist
                     std::ofstream create_file(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
                     create_file.close();
                 }
 
-                // serialize and append to file
                 if (is_serialized)
                 {
                     serialize(writepath, ParitySlice(append_offset, append_size, buf));
@@ -234,11 +257,20 @@ namespace ECProject
                     append_file.flush();
                     append_file.close();
                 }
+                if (m_sys_config->BenchDurableIO)
+                {
+                    durable_fsync_file(writepath);
+                    send_append_durable_ack(socket);
+                }
+                asio::error_code ignore_ec;
+                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+                socket.close(ignore_ec);
 
                 if (IF_DEBUG)
                 {
                     std::cout << "[Datanode" << m_port << "][Append167] successfully append parity block " << block_key << " with " << append_size << " bytes" << std::endl;
                 }
+                delete[] buf;
             }
             catch (const std::exception &e)
             {
@@ -252,7 +284,20 @@ namespace ECProject
             {
                 // std::cout << "[Datanode" << m_port << "][Append109] block_key: " << block_key << ", block_id: " << block_id << ", append_size: " << append_size << ", append_offset: " << append_offset << " is_serialized: " << is_serialized << std::endl;
             }
-            if (block_id < m_sys_config->k)
+            if (m_sys_config->BenchDurableIO)
+            {
+                if (block_id < m_sys_config->k)
+                {
+                    std::thread my_thread(dataBlockHandler, block_key, append_size, append_offset);
+                    my_thread.join();
+                }
+                else
+                {
+                    std::thread my_thread(ParityBlockHandler, block_key, append_size, append_offset, is_serialized);
+                    my_thread.join();
+                }
+            }
+            else if (block_id < m_sys_config->k)
             {
                 std::thread my_thread(dataBlockHandler, block_key, append_size, append_offset);
                 my_thread.detach();
@@ -727,6 +772,10 @@ namespace ECProject
             if (IF_DEBUG)
             {
                 std::cout << "[Datanode" << m_port << "][GET] read from the disk and write to socket with port " << m_port + ECProject::DATANODE_PORT_SHIFT << std::endl;
+            }
+            if (m_sys_config->BenchDurableIO)
+            {
+                evict_file_page_cache(readpath);
             }
             std::ifstream ifs(readpath);
             ifs.read(buf, block_size);
