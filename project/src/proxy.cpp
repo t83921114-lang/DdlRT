@@ -2730,50 +2730,65 @@ namespace ECProject
   grpc::Status ProxyImpl::getBlocks(grpc::ServerContext *context,
     const proxy_proto::StripeAndBlockIDs *request, proxy_proto::GetReply *response)
   {
-    std::cout << "getting blocks" << "[" << request->block_ids(0) << "]" << "to" << "[" << request->block_ids(request->block_ids_size() - 1) << "]" << std::endl;
-    int BlockSize = m_sys_config->BlockSize;
-    size_t total_size = static_cast<size_t> (BlockSize) * request->block_ids_size();
+    (void)context;
+    (void)response;
+    std::cout << "getting blocks" << "[" << request->block_ids(0) << "]" << "to" << "["
+              << request->block_ids(request->block_ids_size() - 1) << "]" << std::endl;
+    const int BlockSize = m_sys_config->BlockSize;
+    const int block_count = request->block_ids_size();
+    const size_t total_size =
+        static_cast<size_t>(BlockSize) * static_cast<size_t>(block_count);
     char *blocks = new char[total_size];
-    uint32_t group_id = request->group_id();
 
     std::vector<std::thread> get_threads;
-    for(int i = 0; i < request->block_ids_size(); i++)
+    get_threads.reserve(static_cast<size_t>(block_count));
+    for (int i = 0; i < block_count; i++)
     {
-      get_threads.push_back(std::thread([this, i, &blocks, &request, BlockSize]() {
+      get_threads.emplace_back([this, i, blocks, request, BlockSize]() {
         this->GetFromDatanode(
-            request->block_keys(i), 
-            blocks + i * BlockSize,
-            static_cast<size_t>(m_sys_config->BlockSize), 
-            request->datanodeips(i).c_str(), 
-            static_cast<int>(request->datanodeports(i))
-        );    
-      }));
+            request->block_keys(i),
+            blocks + static_cast<size_t>(i) * static_cast<size_t>(BlockSize),
+            static_cast<size_t>(BlockSize),
+            request->datanodeips(i).c_str(),
+            static_cast<int>(request->datanodeports(i)));
+      });
+    }
+
+    for (int i = 0; i < block_count; i++)
+    {
+      get_threads[i].join();
+    }
+
+    for (int i = 0; i < block_count; i++)
+    {
       asio::error_code error;
       asio::io_context io_context;
       asio::ip::tcp::socket socket_data(io_context);
       asio::ip::tcp::resolver resolver(io_context);
-      asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(request->clientip(), std::to_string(request->clientport()));;
-      socket_data.connect(*endpoints, error);
+      asio::connect(socket_data,
+                    resolver.resolve(request->clientip(),
+                                     std::to_string(request->clientport())),
+                    error);
       if (error)
       {
-        std::cout << "error in connect" << std::endl;
+        std::cout << "[Proxy" << m_self_cluster_id << "][getBlocks] connect to client failed: "
+                  << error.message() << std::endl;
+        delete[] blocks;
+        return grpc::Status(grpc::StatusCode::INTERNAL, "connect to client failed");
       }
-      std::cout << "connected to client" << std::endl;
-      u_int32_t block_id = request->block_ids(i);
-      asio::write(socket_data, asio::buffer(&block_id, sizeof(u_int32_t)));
-      asio::write(socket_data, asio::buffer(blocks + i * static_cast<size_t>(BlockSize), BlockSize));
+      const u_int32_t block_id = request->block_ids(i);
+      asio::write(socket_data, asio::buffer(&block_id, sizeof(u_int32_t)), error);
+      asio::write(socket_data,
+                  asio::buffer(blocks + static_cast<size_t>(i) * static_cast<size_t>(BlockSize),
+                               static_cast<size_t>(BlockSize)),
+                  error);
       asio::error_code ignore_ec;
       socket_data.shutdown(asio::ip::tcp::socket::shutdown_send, ignore_ec);
       socket_data.close(ignore_ec);
     }
 
-    for(int i = 0; i < request->block_ids_size(); i++)
-    {
-      get_threads[i].join();
-    }
-
-    delete blocks;
-    return grpc::Status();
+    delete[] blocks;
+    return grpc::Status::OK;
   }
 
 } // namespace ECProject
